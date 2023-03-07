@@ -4,9 +4,21 @@ import type {
 	Options,
 	LogicalExpression,
 	Identifier,
+	TemplateLiteral,
 } from 'jscodeshift';
 
 type ExpressionKind = LogicalExpression['left'];
+
+const getLiteralsFromTemplateLiteral = (
+	templateLiteral: TemplateLiteral,
+): ReadonlyArray<string> => {
+	return templateLiteral.quasis.flatMap((templateElement) => {
+		return templateElement.value.raw
+			.split(/\s/)
+			.map((str) => str.trim())
+			.filter((str) => str !== '');
+	});
+};
 
 // this is the entry point for a JSCodeshift codemod
 export default function transform(
@@ -32,40 +44,52 @@ export default function transform(
 		const literals: string[] = [];
 		const objectExpressions: [ExpressionKind, ExpressionKind][] = [];
 
-		ceCollection.find(j.TemplateElement).forEach((tePath) => {
-			const templateElement = tePath.node;
+		cePath.node.arguments.forEach((argument) => {
+			if (argument.type === 'TemplateLiteral') {
+				const names = getLiteralsFromTemplateLiteral(argument);
 
-			const names = templateElement.value.raw
-				.split(/\s/)
-				.map((str) => str.trim())
-				.filter((str) => str !== '');
+				literals.push(...names);
 
-			literals.push(...names);
+				argument.expressions.forEach((expression) => {
+					if (expression.type === 'LogicalExpression') {
+						if (expression.right.type === 'TemplateLiteral') {
+							getLiteralsFromTemplateLiteral(expression.right)
+								.map((name) => j.literal(name))
+								.forEach((literal) => {
+									objectExpressions.push([
+										literal,
+										expression.left,
+									]);
+								});
+						}
+					}
+				});
+			}
 		});
 
-		ceCollection.find(j.TemplateLiteral).forEach((tlPath) => {
-			const templateLiteral = tlPath.node;
+		// ceCollection.find(j.TemplateLiteral).forEach((tlPath) => {
+		//     const templateLiteral = tlPath.node;
 
-			templateLiteral.expressions.forEach((expressionKind) => {
-				if (expressionKind.type === 'Identifier') {
-					identifiers.push(expressionKind);
-				}
-			});
-		});
+		//     templateLiteral.expressions.forEach((expressionKind) => {
+		//         if (expressionKind.type === 'Identifier') {
+		//             identifiers.push(expressionKind);
+		//         }
+		//     });
+		// });
 
-		ceCollection
-			.find(j.LogicalExpression, {
-				type: 'LogicalExpression',
-				operator: '&&',
-				right: {
-					type: 'StringLiteral',
-				},
-			})
-			.forEach((lePath) => {
-				const { left, right } = lePath.node;
+		// ceCollection
+		//     .find(j.LogicalExpression, {
+		//         type: 'LogicalExpression',
+		//         operator: '&&',
+		//         right: {
+		//             type: 'StringLiteral',
+		//         },
+		//     })
+		//     .forEach((lePath) => {
+		//         const { left, right } = lePath.node;
 
-				objectExpressions.push([left, right]);
-			});
+		//         objectExpressions.push([left, right]);
+		//     });
 
 		ceCollection.replaceWith(() => {
 			dirtyFlag = true;
