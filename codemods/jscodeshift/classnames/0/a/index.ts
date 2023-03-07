@@ -17,6 +17,8 @@ export default function transform(
 	const j = api.jscodeshift;
 	const root = j(file.source);
 
+	let dirtyFlag = false;
+
 	root.find(j.CallExpression, {
 		type: 'CallExpression',
 		callee: {
@@ -65,8 +67,10 @@ export default function transform(
 				objectExpressions.push([left, right]);
 			});
 
-		ceCollection.replaceWith(
-			j.expressionStatement(
+		ceCollection.replaceWith(() => {
+			dirtyFlag = true;
+
+			return j.expressionStatement(
 				j.callExpression(j.identifier('cn'), [
 					...identifiers,
 					...literals.map((e) => j.literal(e)),
@@ -81,8 +85,8 @@ export default function transform(
 						],
 					})),
 				]),
-			),
-		);
+			);
+		});
 	});
 
 	root.find(j.ImportDeclaration, {
@@ -99,23 +103,27 @@ export default function transform(
 		],
 		source: {
 			type: 'StringLiteral',
-			extra: {
-				rawValue: '@netlify/classnames-template-literals',
-				raw: "'@netlify/classnames-template-literals'",
-			},
 			value: '@netlify/classnames-template-literals',
 		},
-	}).replaceWith({
-		type: 'ImportDeclaration',
-		importKind: 'value',
-		specifiers: [
-			{
-				type: 'ImportDefaultSpecifier',
-				local: { type: 'Identifier', name: 'cn' },
-			},
-		],
-		source: { type: 'StringLiteral', value: 'classnames' },
+	}).replaceWith(() => {
+		dirtyFlag = true;
+
+		return {
+			type: 'ImportDeclaration',
+			importKind: 'value',
+			specifiers: [
+				{
+					type: 'ImportDefaultSpecifier',
+					local: { type: 'Identifier', name: 'cn' },
+				},
+			],
+			source: { type: 'StringLiteral', value: 'classnames' },
+		};
 	});
+
+	if (!dirtyFlag) {
+		return undefined;
+	}
 
 	return root.toSource();
 }
