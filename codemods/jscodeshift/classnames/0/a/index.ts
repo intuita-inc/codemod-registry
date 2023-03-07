@@ -57,10 +57,17 @@ export default function transform(
 								.map((name) => j.literal(name))
 								.forEach((literal) => {
 									objectExpressions.push([
-										literal,
 										expression.left,
+										literal,
 									]);
 								});
+						}
+
+						if (expression.right.type === 'StringLiteral') {
+							objectExpressions.push([
+								expression.left,
+								expression.right,
+							]);
 						}
 					}
 				});
@@ -77,39 +84,23 @@ export default function transform(
 		//     });
 		// });
 
-		// ceCollection
-		//     .find(j.LogicalExpression, {
-		//         type: 'LogicalExpression',
-		//         operator: '&&',
-		//         right: {
-		//             type: 'StringLiteral',
-		//         },
-		//     })
-		//     .forEach((lePath) => {
-		//         const { left, right } = lePath.node;
-
-		//         objectExpressions.push([left, right]);
-		//     });
-
 		ceCollection.replaceWith(() => {
 			dirtyFlag = true;
 
-			return j.expressionStatement(
-				j.callExpression(j.identifier('cn'), [
-					...identifiers,
-					...literals.map((e) => j.literal(e)),
-					...objectExpressions.map(([left, right]) => ({
-						type: 'ObjectExpression' as const,
-						properties: [
-							{
-								type: 'ObjectProperty' as const,
-								key: right,
-								value: left,
-							},
-						],
-					})),
-				]),
-			);
+			return j.callExpression(j.identifier('cn'), [
+				...identifiers,
+				...literals.map((e) => j.literal(e)),
+				...objectExpressions.map(([left, right]) => ({
+					type: 'ObjectExpression' as const,
+					properties: [
+						{
+							type: 'ObjectProperty' as const,
+							key: right,
+							value: left,
+						},
+					],
+				})),
+			]);
 		});
 	});
 
