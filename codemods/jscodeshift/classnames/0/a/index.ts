@@ -8,13 +8,15 @@ import type {
 	Literal,
 	Identifier,
 	ObjectExpression,
+	MemberExpression,
+	SpreadElement,
 } from 'jscodeshift';
 
 type ExpressionKind = LogicalExpression['left'];
 
 type CustomObjectExpression = {
 	left: ExpressionKind;
-	right: StringLiteral | Literal | Identifier;
+	right: StringLiteral | Literal | Identifier | MemberExpression;
 };
 
 const getLiteralsFromTemplateLiteral = (
@@ -73,13 +75,17 @@ export default function transform(
 		};
 
 		const handleTemplateLiteral = (templateLiteral: TemplateLiteral) => {
-			const identifiers: Identifier[] = [];
+			const identifiers: (Identifier | MemberExpression)[] = [];
 
 			const literals = getLiteralsFromTemplateLiteral(templateLiteral);
 
 			const objectExpressions = templateLiteral.expressions.flatMap(
 				(expression): ReadonlyArray<CustomObjectExpression> => {
 					if (expression.type === 'Identifier') {
+						identifiers.push(expression);
+					}
+
+					if (expression.type === 'MemberExpression') {
 						identifiers.push(expression);
 					}
 
@@ -132,7 +138,7 @@ export default function transform(
 			};
 		};
 
-		const identifiers: Identifier[] = [];
+		const identifiers: (Identifier | MemberExpression)[] = [];
 		const literals: string[] = [];
 		const objectExpressions: CustomObjectExpression[] = [];
 
@@ -159,10 +165,13 @@ export default function transform(
 				]),
 			);
 		} else {
-			const oeArray: ObjectExpression[] = [];
+			const argumentArray: (ExpressionKind | SpreadElement)[] = [
+				...identifiers,
+				...literals.map((e) => j.literal(e)),
+			];
 
 			if (objectExpressions) {
-				oeArray.push({
+				argumentArray.push({
 					type: 'ObjectExpression' as const,
 					properties: objectExpressions.map(({ left, right }) => {
 						return {
@@ -174,13 +183,7 @@ export default function transform(
 				});
 			}
 
-			cePath.replace(
-				j.callExpression(j.identifier('cn'), [
-					...identifiers,
-					...literals.map((e) => j.literal(e)),
-					...oeArray,
-				]),
-			);
+			cePath.replace(j.callExpression(j.identifier('cn'), argumentArray));
 		}
 	});
 
@@ -202,7 +205,7 @@ export default function transform(
 	});
 
 	const cnValue =
-		cnIdCollection.find(j.ImportDefaultSpecifier).nodes()[0]?.name?.name ??
+		cnIdCollection.find(j.ImportDefaultSpecifier).nodes()[0]?.local?.name ??
 		null;
 
 	const ctlIdCollection = root.find(j.ImportDeclaration, {
@@ -224,6 +227,8 @@ export default function transform(
 	});
 
 	if (cnValue) {
+		dirtyFlag = true;
+
 		ctlIdCollection.remove();
 	} else {
 		ctlIdCollection.replaceWith(() => {
@@ -235,7 +240,7 @@ export default function transform(
 				specifiers: [
 					{
 						type: 'ImportDefaultSpecifier',
-						local: { type: 'Identifier', name: 'cn' },
+						local: { type: 'Identifier', name: cnValue ?? 'cn' },
 					},
 				],
 				source: { type: 'StringLiteral', value: 'classnames' },
