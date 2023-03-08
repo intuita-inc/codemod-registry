@@ -127,24 +127,54 @@ export default function transform(
 			}
 		});
 
-		ceCollection.replaceWith(() => {
-			dirtyFlag = true;
+		dirtyFlag = true;
 
-			return j.callExpression(j.identifier('cn'), [
-				...identifiers,
-				...literals.map((e) => j.literal(e)),
-				...objectExpressions.map(({ left, right }) => ({
-					type: 'ObjectExpression' as const,
-					properties: [
-						{
-							type: 'ObjectProperty' as const,
-							key: right,
-							value: left,
-						},
-					],
-				})),
-			]);
-		});
+		if (
+			identifiers.length === 0 &&
+			literals.length === 0 &&
+			objectExpressions.length === 0
+		) {
+			cePath.replace(
+				j.callExpression(j.identifier('cn'), [
+					...cePath.node.arguments,
+				]),
+			);
+		} else {
+			cePath.replace(
+				j.callExpression(j.identifier('cn'), [
+					...identifiers,
+					...literals.map((e) => j.literal(e)),
+					...objectExpressions.map(({ left, right }) => ({
+						type: 'ObjectExpression' as const,
+						properties: [
+							{
+								type: 'ObjectProperty' as const,
+								key: right,
+								value: left,
+							},
+						],
+					})),
+				]),
+			);
+		}
+	});
+
+	const cnIdCollection = root.find(j.ImportDeclaration, {
+		type: 'ImportDeclaration',
+		importKind: 'value',
+		specifiers: [
+			{
+				type: 'ImportDefaultSpecifier',
+				local: {
+					type: 'Identifier',
+					name: 'cn',
+				},
+			},
+		],
+		source: {
+			type: 'StringLiteral',
+			value: 'classnames',
+		},
 	});
 
 	root.find(j.ImportDeclaration, {
@@ -178,6 +208,10 @@ export default function transform(
 			source: { type: 'StringLiteral', value: 'classnames' },
 		};
 	});
+
+	if (cnIdCollection.size() !== 0) {
+		cnIdCollection.remove();
+	}
 
 	if (!dirtyFlag) {
 		return undefined;
