@@ -7,11 +7,12 @@ import type {
 	StringLiteral,
 	Literal,
 	Identifier,
+	ObjectExpression,
 } from 'jscodeshift';
 
 type ExpressionKind = LogicalExpression['left'];
 
-type ObjectExpression = {
+type CustomObjectExpression = {
 	left: ExpressionKind;
 	right: StringLiteral | Literal | Identifier;
 };
@@ -45,15 +46,13 @@ export default function transform(
 			name: 'ctl',
 		},
 	}).forEach((cePath) => {
-		const ceCollection = j(cePath);
-
 		const handleTemplateLiteral = (templateLiteral: TemplateLiteral) => {
 			const identifiers: Identifier[] = [];
 
 			const literals = getLiteralsFromTemplateLiteral(templateLiteral);
 
 			const objectExpressions = templateLiteral.expressions.flatMap(
-				(expression): ObjectExpression[] => {
+				(expression): CustomObjectExpression[] => {
 					if (expression.type === 'Identifier') {
 						identifiers.push(expression);
 					}
@@ -115,7 +114,7 @@ export default function transform(
 
 		const identifiers: Identifier[] = [];
 		const literals: string[] = [];
-		const objectExpressions: ObjectExpression[] = [];
+		const objectExpressions: CustomObjectExpression[] = [];
 
 		cePath.node.arguments.forEach((argument) => {
 			if (argument.type === 'TemplateLiteral') {
@@ -140,20 +139,26 @@ export default function transform(
 				]),
 			);
 		} else {
+			const oeArray: ObjectExpression[] = [];
+
+			if (objectExpressions) {
+				oeArray.push({
+					type: 'ObjectExpression' as const,
+					properties: objectExpressions.map(({ left, right }) => {
+						return {
+							type: 'ObjectProperty' as const,
+							key: right,
+							value: left,
+						};
+					}),
+				});
+			}
+
 			cePath.replace(
 				j.callExpression(j.identifier('cn'), [
 					...identifiers,
 					...literals.map((e) => j.literal(e)),
-					...objectExpressions.map(({ left, right }) => ({
-						type: 'ObjectExpression' as const,
-						properties: [
-							{
-								type: 'ObjectProperty' as const,
-								key: right,
-								value: left,
-							},
-						],
-					})),
+					...oeArray,
 				]),
 			);
 		}
