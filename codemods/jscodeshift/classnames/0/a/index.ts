@@ -46,13 +46,39 @@ export default function transform(
 			name: 'ctl',
 		},
 	}).forEach((cePath) => {
+		const buildCustomObjectExpressions = (
+			returns: ReturnType<typeof handleTemplateLiteral>,
+			expression: LogicalExpression,
+		): ReadonlyArray<CustomObjectExpression> => {
+			return [
+				...returns.identifiers.map((identifier) => {
+					return {
+						left: expression.left,
+						right: identifier,
+					};
+				}),
+				...returns.literals.map((name) => {
+					return {
+						left: expression.left,
+						right: j.literal(name),
+					};
+				}),
+				...returns.objectExpressions.map(({ left, right }) => {
+					return {
+						left: j.logicalExpression('&&', left, expression.left),
+						right,
+					};
+				}),
+			];
+		};
+
 		const handleTemplateLiteral = (templateLiteral: TemplateLiteral) => {
 			const identifiers: Identifier[] = [];
 
 			const literals = getLiteralsFromTemplateLiteral(templateLiteral);
 
 			const objectExpressions = templateLiteral.expressions.flatMap(
-				(expression): CustomObjectExpression[] => {
+				(expression): ReadonlyArray<CustomObjectExpression> => {
 					if (expression.type === 'Identifier') {
 						identifiers.push(expression);
 					}
@@ -63,32 +89,10 @@ export default function transform(
 								expression.right,
 							);
 
-							return [
-								...returns.identifiers.map((identifier) => {
-									return {
-										left: expression.left,
-										right: identifier,
-									};
-								}),
-								...returns.literals.map((name) => {
-									return {
-										left: expression.left,
-										right: j.literal(name),
-									};
-								}),
-								...returns.objectExpressions.map(
-									({ left, right }) => {
-										return {
-											left: j.logicalExpression(
-												'&&',
-												left,
-												expression.left,
-											),
-											right,
-										};
-									},
-								),
-							];
+							return buildCustomObjectExpressions(
+								returns,
+								expression,
+							);
 						}
 
 						if (expression.right.type === 'StringLiteral') {
@@ -107,41 +111,13 @@ export default function transform(
 						) {
 							const [argument] = expression.right.arguments;
 
-							if (argument.type === 'TemplateLiteral') {
+							if (argument?.type === 'TemplateLiteral') {
 								const returns = handleTemplateLiteral(argument);
-								return [
-									...returns.identifiers.map((identifier) => {
-										return {
-											left: expression.left,
-											right: identifier,
-										};
-									}),
-									...returns.literals.map((name) => {
-										return {
-											left: expression.left,
-											right: j.literal(name),
-										};
-									}),
-									...returns.objectExpressions.map(
-										({ left, right }) => {
-											return {
-												left: j.logicalExpression(
-													'&&',
-													left,
-													expression.left,
-												),
-												right,
-											};
-										},
-									),
-								];
+								return buildCustomObjectExpressions(
+									returns,
+									expression,
+								);
 							}
-							// return [
-							//     {
-							//         left: expression.left,
-							//         right: expression.right,
-							//     },
-							// ];
 						}
 					}
 
