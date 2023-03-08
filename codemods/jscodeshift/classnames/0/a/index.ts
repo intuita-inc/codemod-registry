@@ -167,7 +167,6 @@ export default function transform(
 				type: 'ImportDefaultSpecifier',
 				local: {
 					type: 'Identifier',
-					name: 'cn',
 				},
 			},
 		],
@@ -177,7 +176,11 @@ export default function transform(
 		},
 	});
 
-	root.find(j.ImportDeclaration, {
+	const cnValue =
+		cnIdCollection.find(j.ImportDefaultSpecifier).nodes()[0]?.name?.name ??
+		null;
+
+	const ctlIdCollection = root.find(j.ImportDeclaration, {
 		type: 'ImportDeclaration',
 		importKind: 'value',
 		specifiers: [
@@ -193,24 +196,26 @@ export default function transform(
 			type: 'StringLiteral',
 			value: '@netlify/classnames-template-literals',
 		},
-	}).replaceWith(() => {
-		dirtyFlag = true;
-
-		return {
-			type: 'ImportDeclaration',
-			importKind: 'value',
-			specifiers: [
-				{
-					type: 'ImportDefaultSpecifier',
-					local: { type: 'Identifier', name: 'cn' },
-				},
-			],
-			source: { type: 'StringLiteral', value: 'classnames' },
-		};
 	});
 
-	if (cnIdCollection.size() !== 0) {
-		cnIdCollection.remove();
+	if (cnValue) {
+		ctlIdCollection.remove();
+	} else {
+		ctlIdCollection.replaceWith(() => {
+			dirtyFlag = true;
+
+			return {
+				type: 'ImportDeclaration',
+				importKind: 'value',
+				specifiers: [
+					{
+						type: 'ImportDefaultSpecifier',
+						local: { type: 'Identifier', name: 'cn' },
+					},
+				],
+				source: { type: 'StringLiteral', value: 'classnames' },
+			};
+		});
 	}
 
 	if (!dirtyFlag) {
