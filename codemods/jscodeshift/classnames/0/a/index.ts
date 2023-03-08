@@ -99,6 +99,50 @@ export default function transform(
 								},
 							];
 						}
+
+						if (
+							expression.right.type === 'CallExpression' &&
+							expression.right.callee.type === 'Identifier' &&
+							expression.right.callee.name === 'ctl'
+						) {
+							const [argument] = expression.right.arguments;
+
+							if (argument.type === 'TemplateLiteral') {
+								const returns = handleTemplateLiteral(argument);
+								return [
+									...returns.identifiers.map((identifier) => {
+										return {
+											left: expression.left,
+											right: identifier,
+										};
+									}),
+									...returns.literals.map((name) => {
+										return {
+											left: expression.left,
+											right: j.literal(name),
+										};
+									}),
+									...returns.objectExpressions.map(
+										({ left, right }) => {
+											return {
+												left: j.logicalExpression(
+													'&&',
+													left,
+													expression.left,
+												),
+												right,
+											};
+										},
+									),
+								];
+							}
+							// return [
+							//     {
+							//         left: expression.left,
+							//         right: expression.right,
+							//     },
+							// ];
+						}
 					}
 
 					return [];
